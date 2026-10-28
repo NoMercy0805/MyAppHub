@@ -1,6 +1,10 @@
 package de.myapphub
 import android.app.Activity
 import android.app.PendingIntent
+import android.Manifest
+import android.app.job.JobInfo
+import android.app.job.JobScheduler
+import android.content.ComponentName
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.pm.PackageInstaller
@@ -55,6 +59,13 @@ class MainActivity:Activity(){
  override fun onCreate(savedInstanceState:Bundle?){
   super.onCreate(savedInstanceState)
   File(cacheDir,"apks").listFiles()?.forEach{if(it.isFile)it.delete()}
+  val scheduler=getSystemService(JOB_SCHEDULER_SERVICE) as JobScheduler
+  if(scheduler.allPendingJobs.none{it.id==7301}){
+   scheduler.schedule(JobInfo.Builder(7301,ComponentName(this,UpdateCheckJob::class.java))
+    .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+    .setPeriodic(24L*60L*60L*1000L)
+    .setPersisted(true).build())
+  }
   web=WebView(this).apply{
    settings.javaScriptEnabled=true
    settings.domStorageEnabled=true
@@ -65,6 +76,11 @@ class MainActivity:Activity(){
   setContentView(web)
  }
  inner class Bridge{
+  @JavascriptInterface fun enableNotifications(){runOnUiThread{
+   if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),1002)
+   else callback("notify","Update-Benachrichtigungen sind aktiviert.")
+  }}
   @JavascriptInterface fun refresh(){io.execute{refreshApps()}}
   @JavascriptInterface fun open(url:String){
    if(!url.startsWith("https://github.com/$owner/"))return
