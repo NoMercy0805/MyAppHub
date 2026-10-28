@@ -35,6 +35,7 @@ class UpdateCheckJob:JobService(){
      val installedCode=if(Build.VERSION.SDK_INT>=28)installed.longVersionCode else installed.versionCode.toLong()
      val connection=(URL("https://api.github.com/repos/NoMercy0805/"+name+"/releases?per_page=5").openConnection() as HttpURLConnection).apply{
       setRequestProperty("User-Agent","MyAppHub-Android")
+      GithubCredentials.get(this@UpdateCheckJob)?.let{setRequestProperty("Authorization","Bearer "+it)}
       connectTimeout=10000
       readTimeout=10000
      }
