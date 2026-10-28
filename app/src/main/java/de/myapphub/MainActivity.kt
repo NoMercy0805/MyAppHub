@@ -84,6 +84,20 @@ class MainActivity:Activity(){
   setContentView(web)
  }
  inner class Bridge{
+  @JavascriptInterface fun tokenPresent():Boolean=GithubCredentials.get(this@MainActivity)!=null
+  @JavascriptInterface fun saveToken(token:String){
+   try{
+    GithubCredentials.save(this@MainActivity,token)
+    callback("notify","GitHub-Token sicher gespeichert.")
+    io.execute{refreshApps()}
+   }catch(e:Exception){callback("notify","Token konnte nicht gespeichert werden: "+e.message)}
+  }
+  @JavascriptInterface fun clearToken(){
+   GithubCredentials.clear(this@MainActivity)
+   callback("notify","GitHub-Token entfernt.")
+   io.execute{refreshApps()}
+  }
+
   @JavascriptInterface fun launch(repo:String){
    val app=apps.find{it.repo==repo}?:return
    runOnUiThread{
@@ -111,7 +125,7 @@ class MainActivity:Activity(){
     return
    }
    val uri=Uri.parse(url)
-   if(uri.scheme!="https"||uri.host!="github.com"||!uri.path.orEmpty().startsWith("/$owner/$repo/releases/download/"))return
+   if(uri.scheme!="https" || !((uri.host=="github.com" && uri.path.orEmpty().startsWith("/$owner/$repo/releases/download/")) || (uri.host=="api.github.com" && Regex("^/repos/$owner/$repo/releases/assets/[0-9]+$").matches(uri.path.orEmpty()))))return
    io.execute{
     val target=File(cacheDir,"apks/$repo.apk")
     try{
@@ -120,6 +134,10 @@ class MainActivity:Activity(){
      val c=(URL(url).openConnection() as HttpURLConnection).apply{
       connectTimeout=20000;readTimeout=30000
       setRequestProperty("User-Agent","MyAppHub-Android")
+      if(Uri.parse(url).host=="api.github.com"){
+       setRequestProperty("Accept","application/octet-stream")
+       GithubCredentials.get(this@MainActivity)?.let{setRequestProperty("Authorization","Bearer "+it)}
+      }
      }
      try{
       if(c.responseCode !in 200..299)error("Download HTTP "+c.responseCode)
@@ -188,6 +206,7 @@ class MainActivity:Activity(){
   val c=(URL(url).openConnection() as HttpURLConnection).apply{
    setRequestProperty("Accept","application/vnd.github+json")
    setRequestProperty("User-Agent","MyAppHub-Android")
+   GithubCredentials.get(this@MainActivity)?.let{setRequestProperty("Authorization","Bearer "+it)}
    connectTimeout=12000;readTimeout=12000
   }
   return try{
@@ -229,7 +248,7 @@ class MainActivity:Activity(){
      for(j in 0 until assets.length()){
       val asset=assets.getJSONObject(j)
       if(asset.optString("name").endsWith(".apk",true)){
-       apk=asset.optString("browser_download_url")
+       apk=if(GithubCredentials.get(this@MainActivity)!=null)asset.optString("url") else asset.optString("browser_download_url")
        tag=release.optString("tag_name")
        remoteCode=code
        break
