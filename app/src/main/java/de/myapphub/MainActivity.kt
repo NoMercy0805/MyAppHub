@@ -60,13 +60,16 @@ class MainActivity:Activity(){
  override fun onCreate(savedInstanceState:Bundle?){
   super.onCreate(savedInstanceState)
   File(cacheDir,"apks").listFiles()?.forEach{if(it.isFile)it.delete()}
-  val scheduler=getSystemService(JOB_SCHEDULER_SERVICE) as JobScheduler
-  if(scheduler.allPendingJobs.none{it.id==7301}){
-   scheduler.schedule(JobInfo.Builder(7301,ComponentName(this,UpdateCheckJob::class.java))
-    .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-    .setPeriodic(24L*60L*60L*1000L)
-    .setPersisted(true).build())
-  }
+  // Background checks are optional; never block the store from starting.
+  try{
+   val scheduler=getSystemService(JOB_SCHEDULER_SERVICE) as? JobScheduler
+   if(scheduler!=null && scheduler.allPendingJobs.none{it.id==7301}){
+    scheduler.schedule(JobInfo.Builder(7301,ComponentName(this,UpdateCheckJob::class.java))
+     .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+     .setPeriodic(24L*60L*60L*1000L)
+     .setPersisted(true).build())
+   }
+  }catch(e:Exception){android.util.Log.e("MyAppHub","Optional update scheduler failed",e)}
   web=WebView(this).apply{
    settings.javaScriptEnabled=true
    settings.domStorageEnabled=true
