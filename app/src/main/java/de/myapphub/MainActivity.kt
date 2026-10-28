@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -88,6 +89,13 @@ class MainActivity:Activity(){
   }
   @JavascriptInterface fun install(repo:String,url:String){
    val app=apps.find{it.repo==repo}?:return
+   if(Build.VERSION.SDK_INT>=26&&!packageManager.canRequestPackageInstalls()){
+    runOnUiThread{
+     callback("notify","Bitte MyAppHub die Installation von Apps erlauben und anschließend erneut tippen.")
+     startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+packageName)))
+    }
+    return
+   }
    val uri=Uri.parse(url)
    if(uri.scheme!="https"||uri.host!="github.com"||!uri.path.orEmpty().startsWith("/$owner/$repo/releases/download/"))return
    io.execute{
