@@ -3,6 +3,8 @@ on:
  push:
   branches: [main]
  workflow_dispatch:
+permissions:
+ contents: write
 jobs:
  build:
   runs-on: ubuntu-latest
@@ -15,9 +17,20 @@ jobs:
    - uses: gradle/actions/setup-gradle@v4
      with:
       gradle-version: '8.11.1'
+   - name: Set Android versionCode
+     run: sed -i -E 's/versionCode = [0-9]+/versionCode = ${{ github.run_number }}/' app/build.gradle.kts
    - name: Build APK
      run: gradle :app:assembleDebug
+   - name: Publish APK as GitHub Release
+     env:
+      GH_TOKEN: ${{ github.token }}
+     run: |
+      TAG="myapphub-build-${{ github.run_number }}"
+      gh release create "$TAG" "app/build/outputs/apk/debug/app-debug.apk#MyAppHub.apk" \
+        --target "$GITHUB_SHA" --title "MyAppHub Build ${{ github.run_number }}" \
+        --notes "Android-versionCode: ${{ github.run_number }}"
    - uses: actions/upload-artifact@v4
+     continue-on-error: true
      with:
       name: MyAppHub-debug-apk
       path: app/build/outputs/apk/debug/app-debug.apk
