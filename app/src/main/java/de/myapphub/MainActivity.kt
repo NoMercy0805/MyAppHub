@@ -25,7 +25,7 @@ class InstallReceiver:BroadcastReceiver(){
   val status=intent.getIntExtra(PackageInstaller.EXTRA_STATUS,PackageInstaller.STATUS_FAILURE)
   if(status==PackageInstaller.STATUS_PENDING_USER_ACTION){
    val confirm=if(Build.VERSION.SDK_INT>=33)intent.getParcelableExtra(PackageInstaller.EXTRA_INTENT,Intent::class.java)
-     else @Suppress("DEPRECATION") intent.getParcelableExtra<Intent>(PackageInstaller.EXTRA_INTENT)
+     else intent.getParcelableExtra<Intent>(PackageInstaller.EXTRA_INTENT)
    confirm?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
    if(confirm!=null)context.startActivity(confirm)
    return
@@ -71,30 +71,60 @@ class MainActivity:Activity(){
    runOnUiThread{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))}
   }
   @JavascriptInterface fun install(repo:String,url:String){
-   if(apps.none{it.repo==repo})return
-   if(!url.startsWith("https://github.com/$owner/$repo/releases/download/"))return
+   val app=apps.find{it.repo==repo}?:return
+   val uri=Uri.parse(url)
+   if(uri.scheme!="https"||uri.host!="github.com"||!uri.path.orEmpty().startsWith("/$owner/$repo/releases/download/"))return
    io.execute{
+    val target=File(cacheDir,"apks/$repo.apk")
     try{
-     callback("notify","Lade APK für $repo …")
-     val target=File(cacheDir,"apks/$repo.apk")
+     callback("notify","Lade und prüfe "+repo+" …")
      target.parentFile?.mkdirs()
-     val connection=(URL(url).openConnection() as HttpURLConnection).apply{
-      connectTimeout=20000;readTimeout=30000;instanceFollowRedirects=true
+     val c=(URL(url).openConnection() as HttpURLConnection).apply{
+      connectTimeout=20000;readTimeout=30000
+      setRequestProperty("User-Agent","MyAppHub-Android")
      }
      try{
-      if(connection.responseCode !in 200..299)error("Download HTTP ${connection.responseCode}")
-      connection.inputStream.use{src->target.outputStream().use{dst->src.copyTo(dst)}}
-     }finally{connection.disconnect()}
-     if(target.length()<1024)error("Datei ist keine APK")
-     runOnUiThread{
-      val uri=FileProvider.getUriForFile(this@MainActivity,"$packageName.files",target)
-      val intent=Intent(Intent.ACTION_VIEW).apply{
-       setDataAndType(uri,"application/vnd.android.package-archive")
-       addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-      }
-      try{startActivity(intent)}catch(e:Exception){callback("notify","Installation nicht gestartet: ${e.message}")}
+      if(c.responseCode !in 200..299)error("Download HTTP "+c.responseCode)
+      c.inputStream.use{src->target.outputStream().use{dst->src.copyTo(dst)}}
+     }finally{c.disconnect()}
+     if(target.length()<1024)error("APK ist unvollständig")
+     val archive=packageManager.getPackageArchiveInfo(target.absolutePath,PackageManager.GET_SIGNING_CERTIFICATES)
+       ?:error("Keine gültige APK")
+     if(archive.packageName!=app.pkg)error("Paketname stimmt nicht überein")
+     val installed=try{packageManager.getPackageInfo(app.pkg,PackageManager.GET_SIGNING_CERTIFICATES)}
+       catch(_:PackageManager.NameNotFoundException){null}
+     val newCode=if(Build.VERSION.SDK_INT>=28)archive.longVersionCode else archive.versionCode.toLong()
+     val oldCode=if(installed==null)0L else if(Build.VERSION.SDK_INT>=28)installed.longVersionCode else installed.versionCode.toLong()
+     if(installed!=null&&newCode<=oldCode)error("Kein neueres Update: "+oldCode+" / "+newCode)
+     if(installed!=null&&Build.VERSION.SDK_INT>=28){
+      val oldSig=installed.signingInfo?.apkContentsSigners?.map{it.toCharsString()}?.toSet()
+      val newSig=archive.signingInfo?.apkContentsSigners?.map{it.toCharsString()}?.toSet()
+      if(oldSig.isNullOrEmpty()||newSig.isNullOrEmpty()||oldSig!=newSig)
+       error("Signatur stimmt nicht überein. Update gestoppt.")
      }
-    }catch(e:Exception){callback("notify","Download fehlgeschlagen: ${e.message}")}
+     val installer=packageManager.packageInstaller
+     val params=PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+     params.setAppPackageName(app.pkg)
+     val sessionId=installer.createSession(params)
+     try{
+      installer.openSession(sessionId).use{session->
+       target.inputStream().use{input->
+        session.openWrite("base.apk",0,target.length()).use{output->
+         input.copyTo(output)
+         session.fsync(output)
+        }
+       }
+       val pending=PendingIntent.getBroadcast(this@MainActivity,sessionId,
+        Intent(this@MainActivity,InstallReceiver::class.java).putExtra("repo",repo),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
+       session.commit(pending.intentSender)
+      }
+     }catch(e:Exception){installer.abandonSession(sessionId);throw e}
+     callback("notify","Android-Installationsbestätigung öffnen …")
+    }catch(e:Exception){
+     target.delete()
+     callback("notify",repo+": "+(e.message?:"Installation fehlgeschlagen"))
+    }
    }
   }
  }
