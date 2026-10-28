@@ -148,23 +148,29 @@ class MainActivity:Activity(){
     val installed=try{packageManager.getPackageInfo(app.pkg,0)}catch(_:Exception){null}
     item.put("installed",installed!=null)
     item.put("installedVersion",installed?.versionName?:"")
+    val installedCode=if(installed==null)0L else if(Build.VERSION.SDK_INT>=28)installed.longVersionCode else installed.versionCode.toLong()
+    item.put("installedCode",installedCode)
     val releases=JSONArray(readJson("https://api.github.com/repos/$owner/${app.repo}/releases?per_page=10"))
-    var apk="";var tag=""
+    var apk="";var tag="";var remoteCode=0L
     for(i in 0 until releases.length()){
      val release=releases.getJSONObject(i)
      if(release.optBoolean("draft")||release.optBoolean("prerelease"))continue
      val assets=release.optJSONArray("assets")?:continue
+     val code=Regex("""(?im)^Android-versionCode:\s*(\d+)\s*$""").find(release.optString("body"))?.groupValues?.get(1)?.toLongOrNull()?:0L
      for(j in 0 until assets.length()){
       val asset=assets.getJSONObject(j)
       if(asset.optString("name").endsWith(".apk",true)){
        apk=asset.optString("browser_download_url")
        tag=release.optString("tag_name")
+       remoteCode=code
        break
       }
      }
      if(apk.isNotBlank())break
     }
-    item.put("apk",apk).put("tag",tag)
+    item.put("apk",apk).put("tag",tag).put("remoteCode",remoteCode)
+    item.put("update",installed!=null&&remoteCode>installedCode)
+    item.put("versionKnown",remoteCode>0L)
     if(apk.isBlank()){
      val runs=JSONObject(readJson("https://api.github.com/repos/$owner/${app.repo}/actions/runs?status=success&per_page=1")).optJSONArray("workflow_runs")
      item.put("actions",if(runs!=null&&runs.length()>0)runs.getJSONObject(0).optString("html_url") else "https://github.com/$owner/${app.repo}/actions")
