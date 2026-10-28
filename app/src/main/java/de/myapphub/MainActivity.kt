@@ -10,6 +10,10 @@ import android.content.Context
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 import android.provider.Settings
 import android.content.Intent
 import android.net.Uri
@@ -182,6 +186,19 @@ class MainActivity:Activity(){
     val installed=try{packageManager.getPackageInfo(app.pkg,0)}catch(_:Exception){null}
     item.put("installed",installed!=null)
     item.put("installedVersion",installed?.versionName?:"")
+    if(installed!=null){
+     try{
+      val drawable=packageManager.getApplicationIcon(app.pkg)
+      val bitmap=Bitmap.createBitmap(144,144,Bitmap.Config.ARGB_8888)
+      val canvas=Canvas(bitmap)
+      drawable.setBounds(0,0,144,144)
+      drawable.draw(canvas)
+      val stream=ByteArrayOutputStream()
+      bitmap.compress(Bitmap.CompressFormat.PNG,100,stream)
+      item.put("icon","data:image/png;base64,"+Base64.encodeToString(stream.toByteArray(),Base64.NO_WRAP))
+      bitmap.recycle()
+     }catch(_:Exception){}
+    }
     val installedCode=if(installed==null)0L else if(Build.VERSION.SDK_INT>=28)installed.longVersionCode else installed.versionCode.toLong()
     item.put("installedCode",installedCode)
     val releases=JSONArray(readJson("https://api.github.com/repos/$owner/${app.repo}/releases?per_page=10"))
