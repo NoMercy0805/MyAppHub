@@ -236,6 +236,32 @@ class MainActivity:Activity(){
       bitmap.recycle()
      }catch(_:Exception){}
     }
+    // Retrieve the actual launcher icon through the authenticated Contents API.
+    // WebView image tags cannot attach a private GitHub bearer token.
+    if(!item.has("icon")){
+     val iconPaths=mapOf(
+      "CarService" to "app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+      "Haushaltsbuch" to "haushaltsbuch-offline-app/app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+      "Arbeitszeit" to "arbeitszeit-offline-app/app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+      "GalerieSync" to "app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+      "Vertraege" to "vertraege-offline-app/app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+      "Rauchfrei" to "rauchfrei-offline-app/app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+      "IronLog" to "ironlog-offline-app/app/src/main/res/mipmap-xhdpi/ic_launcher.png"
+     )
+     try{
+      val iconPath=iconPaths[app.repo]
+      if(iconPath!=null){
+       val json=JSONObject(readJson("https://api.github.com/repos/$owner/${app.repo}/contents/$iconPath?ref=main"))
+       if(json.optString("encoding")=="base64"){
+        val encoded=json.optString("content").replace("\\s".toRegex(),"")
+        val bytes=Base64.decode(encoded,Base64.DEFAULT)
+        if(bytes.size in 100..524288 && bytes.take(4)==listOf(137.toByte(),80.toByte(),78.toByte(),71.toByte())){
+         item.put("icon","data:image/png;base64,"+Base64.encodeToString(bytes,Base64.NO_WRAP))
+        }
+       }
+      }
+     }catch(_:Exception){/* Keep the existing public icon fallback */ }
+    }
     val installedCode=if(installed==null)0L else if(Build.VERSION.SDK_INT>=28)installed.longVersionCode else installed.versionCode.toLong()
     item.put("installedCode",installedCode)
     val releases=JSONArray(readJson("https://api.github.com/repos/$owner/${app.repo}/releases?per_page=10"))
