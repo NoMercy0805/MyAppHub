@@ -1,5 +1,11 @@
 package de.myapphub
 import android.app.Activity
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
+import android.os.Build
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -14,6 +20,24 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 
+class InstallReceiver:BroadcastReceiver(){
+ override fun onReceive(context:Context,intent:Intent){
+  val status=intent.getIntExtra(PackageInstaller.EXTRA_STATUS,PackageInstaller.STATUS_FAILURE)
+  if(status==PackageInstaller.STATUS_PENDING_USER_ACTION){
+   val confirm=if(Build.VERSION.SDK_INT>=33)intent.getParcelableExtra(PackageInstaller.EXTRA_INTENT,Intent::class.java)
+     else @Suppress("DEPRECATION") intent.getParcelableExtra<Intent>(PackageInstaller.EXTRA_INTENT)
+   confirm?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+   if(confirm!=null)context.startActivity(confirm)
+   return
+  }
+  val repo=intent.getStringExtra("repo")?:""
+  File(context.cacheDir,"apks/$repo.apk").delete()
+  val msg=if(status==PackageInstaller.STATUS_SUCCESS)repo+" erfolgreich installiert."
+    else if(status==PackageInstaller.STATUS_FAILURE_ABORTED)"Installation abgebrochen."
+    else "Installation fehlgeschlagen: "+(intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)?:"Unbekannt")
+  context.getSharedPreferences("hub",Context.MODE_PRIVATE).edit().putString("lastInstall",msg).apply()
+ }
+}
 class MainActivity:Activity(){
  private lateinit var web:WebView
  private val io=Executors.newSingleThreadExecutor()
@@ -30,6 +54,7 @@ class MainActivity:Activity(){
  )
  override fun onCreate(savedInstanceState:Bundle?){
   super.onCreate(savedInstanceState)
+  File(cacheDir,"apks").listFiles()?.forEach{if(it.isFile)it.delete()}
   web=WebView(this).apply{
    settings.javaScriptEnabled=true
    settings.domStorageEnabled=true
@@ -121,6 +146,18 @@ class MainActivity:Activity(){
  }
  private fun callback(fn:String,value:String){
   runOnUiThread{web.evaluateJavascript("window.$fn(${JSONObject.quote(value)})",null)}
+ }
+ override fun onResume(){
+  super.onResume()
+  if(::web.isInitialized){
+   val p=getSharedPreferences("hub",MODE_PRIVATE)
+   val message=p.getString("lastInstall","").orEmpty()
+   if(message.isNotBlank()){
+    p.edit().remove("lastInstall").apply()
+    callback("notify",message)
+    io.execute{refreshApps()}
+   }
+  }
  }
  override fun onDestroy(){io.shutdownNow();web.destroy();super.onDestroy()}
 }
