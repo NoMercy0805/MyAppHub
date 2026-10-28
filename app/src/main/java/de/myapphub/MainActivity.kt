@@ -115,7 +115,7 @@ class MainActivity:Activity(){
    io.execute{
     val target=File(cacheDir,"apks/$repo.apk")
     try{
-     callback("notify","Lade und prüfe "+repo+" …")
+     callback("downloadProgress",JSONObject().put("repo",repo).put("percent",0).put("state","Download wird gestartet").toString())
      target.parentFile?.mkdirs()
      val c=(URL(url).openConnection() as HttpURLConnection).apply{
       connectTimeout=20000;readTimeout=30000
@@ -123,9 +123,27 @@ class MainActivity:Activity(){
      }
      try{
       if(c.responseCode !in 200..299)error("Download HTTP "+c.responseCode)
-      c.inputStream.use{src->target.outputStream().use{dst->src.copyTo(dst)}}
+      val total=c.contentLengthLong
+      var received=0L
+      var lastPercent=-1
+      c.inputStream.use{src->target.outputStream().use{dst->
+       val buf=ByteArray(32768)
+       while(true){
+        val count=src.read(buf)
+        if(count<0)break
+        dst.write(buf,0,count)
+        received+=count
+        val percent=if(total>0)((received*100/total).coerceIn(0,100)).toInt() else -1
+        if(percent!=lastPercent){
+         lastPercent=percent
+         callback("downloadProgress",JSONObject().put("repo",repo).put("percent",percent)
+          .put("received",received).put("total",total).put("state","APK wird heruntergeladen").toString())
+        }
+       }
+      }}
      }finally{c.disconnect()}
      if(target.length()<1024)error("APK ist unvollständig")
+     callback("downloadProgress",JSONObject().put("repo",repo).put("percent",100).put("state","APK wird geprüft").toString())
      val archive=packageManager.getPackageArchiveInfo(target.absolutePath,PackageManager.GET_SIGNING_CERTIFICATES)
        ?:error("Keine gültige APK")
      if(archive.packageName!=app.pkg)error("Paketname stimmt nicht überein")
@@ -158,10 +176,10 @@ class MainActivity:Activity(){
        session.commit(pending.intentSender)
       }
      }catch(e:Exception){installer.abandonSession(sessionId);throw e}
-     callback("notify","Android-Installationsbestätigung öffnen …")
+     callback("downloadProgress",JSONObject().put("repo",repo).put("percent",100).put("state","Installation bestätigen").toString())
     }catch(e:Exception){
      target.delete()
-     callback("notify",repo+": "+(e.message?:"Installation fehlgeschlagen"))
+     callback("downloadProgress",JSONObject().put("repo",repo).put("percent",-2).put("state",e.message?:"Installation fehlgeschlagen").toString())
     }
    }
   }
