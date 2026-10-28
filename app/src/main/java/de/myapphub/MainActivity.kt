@@ -77,6 +77,13 @@ class MainActivity:Activity(){
   setContentView(web)
  }
  inner class Bridge{
+  @JavascriptInterface fun launch(repo:String){
+   val app=apps.find{it.repo==repo}?:return
+   runOnUiThread{
+    val intent=packageManager.getLaunchIntentForPackage(app.pkg)
+    if(intent!=null)startActivity(intent) else callback("notify","App kann nicht geöffnet werden.")
+   }
+  }
   @JavascriptInterface fun enableNotifications(){runOnUiThread{
    if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
     requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),1002)
