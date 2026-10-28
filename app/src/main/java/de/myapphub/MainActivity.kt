@@ -24,8 +24,8 @@ class InstallReceiver:BroadcastReceiver(){
  override fun onReceive(context:Context,intent:Intent){
   val status=intent.getIntExtra(PackageInstaller.EXTRA_STATUS,PackageInstaller.STATUS_FAILURE)
   if(status==PackageInstaller.STATUS_PENDING_USER_ACTION){
-   val confirm=if(Build.VERSION.SDK_INT>=33)intent.getParcelableExtra(PackageInstaller.EXTRA_INTENT,Intent::class.java)
-     else intent.getParcelableExtra<Intent>(PackageInstaller.EXTRA_INTENT)
+   val confirm=if(Build.VERSION.SDK_INT>=33)intent.getParcelableExtra(Intent.EXTRA_INTENT,Intent::class.java)
+     else intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
    confirm?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
    if(confirm!=null)context.startActivity(confirm)
    return
