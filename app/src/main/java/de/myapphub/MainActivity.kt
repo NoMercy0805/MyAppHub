@@ -85,6 +85,13 @@ class MainActivity:Activity(){
  }
  inner class Bridge{
   @JavascriptInterface fun tokenPresent():Boolean=GithubCredentials.get(this@MainActivity)!=null
+  @JavascriptInterface fun installedCode(repo:String):Long{
+   val app=apps.find{it.repo==repo}?:return -1L
+   return try{
+    val info=packageManager.getPackageInfo(app.pkg,0)
+    if(Build.VERSION.SDK_INT>=28)info.longVersionCode else info.versionCode.toLong()
+   }catch(_:Exception){0L}
+  }
   @JavascriptInterface fun saveToken(token:String){
    try{
     GithubCredentials.save(this@MainActivity,token)
