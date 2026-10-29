@@ -43,3 +43,10 @@ Diese Datei ist die zentrale Arbeitsanweisung für Änderungen an den Android-Ap
 - Kein Update vortäuschen, wenn Release, Signatur oder versionCode unbekannt sind.
 - Bestehende Nutzerdaten und Einstellungen beim Update erhalten.
 - Fehlerhafte oder noch laufende CI-Builds nicht als fertige APK bezeichnen.
+
+## MyAppHub – Verhalten ab 2026-10-29
+- GitHub-Token ist über das Zahnrad in einem separaten Dialog erreichbar, nicht dauerhaft auf der Startseite.
+- Beim Start lädt die WebView automatisch die Update-Liste (`reload()`).
+- Nach dem Start einer APK-Installation prüft die UI alle zwei Sekunden lokal den installierten Android-VersionCode; bei Erhöhung wird einmalig die GitHub-Liste neu geladen. Das Polling endet nach maximal drei Minuten und ist keine dauerhafte Netzwerkanfrage.
+- Die Android-Installation erfordert weiterhin eine Bestätigung des Nutzers; abgebrochene/fehlgeschlagene Installation ist kein erfolgreicher Updateabschluss.
+- Build und Release: `.github/workflows/build.yml` wird bei Push auf `main` automatisch gestartet und veröffentlicht MyAppHub.apk als Release mit Android-versionCode.
